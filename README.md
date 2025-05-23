@@ -1,2 +1,4 @@
 # OutreachIq
 AI-Powered Cold Email Generator
+
+Secret key is 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
