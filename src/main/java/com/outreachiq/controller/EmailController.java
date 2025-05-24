@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.outreachiq.model.OutputEmail;
 import com.outreachiq.model.ProductInput;
@@ -13,7 +14,7 @@ import com.outreachiq.service.OpenAiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-//@RestController
+@RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*") // Enable CORS for all origins (for react frontend)

@@ -1,103 +1,114 @@
 package com.outreachiq.service;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.outreachiq.model.OutputEmail;
 import com.outreachiq.model.ProductInput;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
-//@Service
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
 @RequiredArgsConstructor
 public class OpenAiService {
 
-	@Value("${spring.ai.api.key}")
-	private String apiKey; // API key for authenticating requests
+    @Value("${openrouter.api.key}")
+    private String apiKey;
 
-	@Value("${spring.ai.endpoint}")
-	private String apiEndpoint; // Endpoint URL for the chat model API
+    @Value("${openrouter.base-url}")
+    private String baseUrl;
 
-	private final RestTemplate restTemplate;
+    @Value("${openrouter.model}")
+    private String model;
 
-//	private final ChatClient chatClient;
-//	private final ObjectMapper objectMapper = new ObjectMapper();
+    @Value("${openrouter.referer}")
+    private String referer;
 
-	public OutputEmail generateEmail(ProductInput input) {
-		HttpHeaders headers = new HttpHeaders();
-		headers.setContentType(MediaType.APPLICATION_JSON); // Set content type to JSON
-		headers.set("Authorization", "Bearer " + apiKey); // Set API key in the Authorization header
-		String promptText = buildPrompt(input);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-		// Creating request body
-		Map<String, Object> requestBody = new HashMap<>();
-		requestBody.put("model", "gpt-3.5-turbo"); // Specify the model
-		requestBody.put("messages", Collections.singletonList(Map.of("role", "user", "content", input) // Set user input
-																										// as message
-		));
-		requestBody.put("temperature", 1); // Control response randomness
-//		requestBody.put("max_tokens", 150); // Limit the response length
-		HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers); // Create HTTP entity with
-																							// request body and headers
-		ResponseEntity<String> response = restTemplate.postForEntity(apiEndpoint, request, String.class); // Send POST
-																											// request
-																											// to the
-																											// API
+    public OutputEmail generateEmail(ProductInput input) {
+        String prompt = buildPrompt(input);
 
-		// Process and return the response
-		return parseResponse(response.getBody()); // Extract and return response text
+        // Build message structure
+        Map<String, Object> message = new HashMap<>();
+        message.put("role", "user");
+        message.put("content", prompt);
 
-	}
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", model);
+        requestBody.put("messages", List.of(message));
+        requestBody.put("temperature", 0.7);
 
-	// Parse the response JSON to extract text
-	private OutputEmail parseResponse(String responseBody) {
-		ObjectMapper mapper = new ObjectMapper();
-		try {
-			JsonNode json = mapper.readTree(responseBody); // Parse JSON response
-			OutputEmail result = new OutputEmail();
-			result.setSubject(json.path("subject").asText());
-			result.setBody(json.path("body").asText());
-			return result;
-		} catch (JsonProcessingException e) {
-			e.printStackTrace();
-			OutputEmail fallback = new OutputEmail();
-			fallback.setSubject("Could not parse AI response.");
-			fallback.setBody("Something wet wrong. Kindly try again in a few minutes."); // return raw content
-			return fallback;
-		}
-	}
+        WebClient webClient = WebClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .defaultHeader("HTTP-Referer", referer) // Required by OpenRouter
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
 
-	private String buildPrompt(ProductInput input) {
-		return String.format("""
-				    Generate a cold outreach email for a new product using the following:
+        try {
+            String response = webClient.post()
+                    .body(Mono.just(requestBody), Map.class)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
 
-				    Product Name: %s
-				    Tagline: %s
-				    Overview: %s
-				    Features: %s
-				    Pricing: %s
-				    Contact Info: %s
-				    Target Audience: %s
-				    Tone: %s
+            JsonNode jsonNode = objectMapper.readTree(response);
+            String content = jsonNode
+                    .path("choices")
+                    .get(0)
+                    .path("message")
+                    .path("content")
+                    .asText();
 
-				    Return ONLY this JSON format:
-				    {
-				      "subject": "Your email subject",
-				      "body": "Your email body text"
-				    }
-				""", input.getProductName(), input.getProductTagLine(), input.getProductOverview(),
-				String.join(", ", input.getKeyFeatures()), input.getPricingDetails(), input.getContactInfo(),
-				input.getTargetAudience(), input.getTone());
-	}
+            JsonNode parsedContent = objectMapper.readTree(content);
+            OutputEmail result = new OutputEmail();
+            result.setSubject(parsedContent.path("subject").asText());
+            result.setBody(parsedContent.path("body").asText());
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            OutputEmail fallback = new OutputEmail();
+            fallback.setSubject("Failed to generate subject");
+            fallback.setBody("Error communicating with AI service.");
+            return fallback;
+        }
+    }
+
+    private String buildPrompt(ProductInput input) {
+        return String.format("""
+                Generate a cold outreach email using the following:
+                Product Name: %s
+                Tagline: %s
+                Overview: %s
+                Key Features: %s
+                Pricing: %s
+                Contact Info: %s
+                Target Audience: %s
+                Tone: %s
+
+                Respond strictly in this JSON format:
+                {
+                  "subject": "...",
+                  "body": "..."
+                }
+                """,
+                input.getProductName(),
+                input.getProductTagLine(),
+                input.getProductOverview(),
+                String.join(", ", input.getKeyFeatures()),
+                input.getPricingDetails(),
+                input.getContactInfo(),
+                input.getTargetAudience(),
+                input.getTone());
+    }
 }

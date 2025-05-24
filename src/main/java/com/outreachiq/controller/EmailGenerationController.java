@@ -9,14 +9,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.outreachiq.model.ProductInput;
 import com.outreachiq.service.EmailGenerationService;
 
 import jakarta.validation.Valid;
 
-@RestController
+//@RestController
 @RequestMapping("/api/email")
 @CrossOrigin(origins = "*")
 public class EmailGenerationController {

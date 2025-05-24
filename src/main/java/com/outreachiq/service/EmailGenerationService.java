@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.Collections;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -17,7 +16,7 @@ import com.outreachiq.model.GPTResponse;
 import com.outreachiq.model.OutputEmail;
 import com.outreachiq.model.ProductInput;
 
-@Service
+//@Service
 public class EmailGenerationService {
 
 	private final WebClient openAIWebClient;
